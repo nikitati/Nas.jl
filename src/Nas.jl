@@ -2,10 +2,13 @@ module Nas
 
 using Flux, Zygote
 
-export ParameterValue, ParameterDomain, Hyperparameter, DependentParameter,
-       hyperparams, getvalue, assign!, compile, compose,
-       TemplateDense, TemplateChain
-include("searchspaces/basic.jl")
+
+include("searchspaces/hyperparameters.jl")
+export Assignment, Domain, Hyperparameter, DependentParameter,
+       getvalue, assign!, hyperparams
+include("searchspaces/nodes.jl")
+export ChoiceNode, InputNode,
+       nchoices
 
 
 end
