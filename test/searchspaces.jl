@@ -1,28 +1,54 @@
 using Test, Nas, Flux
 
-@testset "Hyperparameters" begin
-    phidden = Hyperparameter(Domain([80, 100, 120]))
-    pactiv = Hyperparameter(Domain([sigmoid, relu]))
-    pinit = DependentParameter([], () -> 200)
-    pdep = DependentParameter([phidden], getvalue)
-    @test getvalue(phidden) == nothing
-    @test getvalue(pactiv) == nothing
-    assign!(phidden, 100)
-    @test getvalue(phidden) == 100
-    @test getvalue(pdep) == 100
-    assign!(pactiv, relu)
-    @test getvalue(pactiv) == relu
-    @test getvalue(pinit) == 200
+@testset "ChoiceNode" begin
+    c = ChoiceNode(
+        Chain(Dense(10, 100), Dense(100, 2)),
+        Chain(Dense(10, 150), Dense(150, 2)),
+        Chain(Dense(10, 200), Dense(200, 2))
+    )
+    x = randn(10, 500)
+    y = c(x)
+    @test size(y[1]) == (2, 500)
+    z = [0, 1, 0]
+    y = c(x, z)
+    @test size(y) == (2, 500)
+    @test isequal(c[2](x), y)
 end
 
-@testset "Nodes" begin
-    sdense = Dense(50, 100)
-    choices = [Dense(100, 200), Dense(100, 300), Dense(100, 400)]
-    choiceout = DependentParameter()
-    cdense = ChoiceNode(choices)
-    i = 2
-    x = randn(50, 100)
-    f = Chain(sdense, cdense, ys -> ys[i])
-    y = choices[i](sdense(x))
-    @test isequal(f(x), y)
+@testset "Gumbel" begin
+    s = GumbelSoftmax([0.2, 0.3, 0.5], 1.0)
+    g = gumbelrand(3)
+    z = s(g)
+    @test size(z) == (3,)
+    @test all(0<= z_i <= 1 for z_i in z)
+    @test isequal(sum(z), 1)
+    c = ChoiceNode(
+        Chain(Dense(10, 100), Dense(100, 2)),
+        Chain(Dense(10, 150), Dense(150, 2)),
+        Chain(Dense(10, 200), Dense(200, 2))
+    )
+    x = randn(10, 500)
+    y = c(x, z)
+    @test size(y) == (2, 500)
+end
+
+@testset "Searchspace" begin
+    c1 = ChoiceNode(
+        Chain(Dense(128, 300), Dense(300, 64)),
+        Chain(Dense(128, 400), Dense(400, 64)),
+        Chain(Dense(128, 500), Dense(500, 64))
+    )
+    c2 = ChoiceNode(
+        Chain(Dense(64, 100), Dense(100, 10)),
+        Chain(Dense(64, 150), Dense(150, 10)),
+    )
+    α = [[0, 1, 0], [0, 2]]
+    s = SearchSpace(((c1, α[1]), (c2, α[2])))
+    x = randn(128, 500)
+    model = Chain(applicative(s, 1), applicative(s, 2))
+    y = model(x)
+    @test size(y) == (10, 500)
+    α[1] = [0, 0, 1]
+    y = model(x)
+    @test size(y) == (10, 500)
 end
