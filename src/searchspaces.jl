@@ -7,7 +7,7 @@ using Flux
 Create a search space choice between several layers.
 """
 struct ChoiceNode{T}
-    ms::Vector{T}
+    ms::AbstractArray{T, 1}
 end
 
 ChoiceNode(ms...) = ChoiceNode([ms...])
@@ -21,6 +21,10 @@ end
 function (cn::ChoiceNode)(x::AbstractArray, z::AbstractArray)
     sum(cn(x) .* z)
 end
+
+applicative(cn::ChoiceNode, α::AbstractArray) = x -> cn(x, α)
+applicative(cn::ChoiceNode, α) = x -> cn(x, α())
+
 
 Base.getindex(cn::ChoiceNode, i::Integer) = cn.ms[i]
 Base.getindex(cn::ChoiceNode, i::AbstractArray) = cn.ms[i]
@@ -45,11 +49,6 @@ end
 
 Base.getindex(ss::SearchSpace, i::Integer) = ss.choices[i]
 
-function applicative(ss::SearchSpace, i::Integer)
-    cn, α = ss[i]
-    x -> cn(x, α)
-end
-
 function gumbelrand(dims...)
     -log.(-log.(rand(dims...)))
 end
@@ -66,7 +65,7 @@ probabilities `p`, gumbel random variable `g` and temperature parameter `t`:
 where σ is a softmax function.
 """
 mutable struct GumbelSoftmax
-    p::Vector{Float64}
+    p::AbstractArray{Float64, 1}
     t::Float64
 end
 
@@ -78,7 +77,28 @@ function (gs::GumbelSoftmax)(g::AbstractArray)
     softmax(glogits)
 end
 
+function (gs::GumbelSoftmax)()
+    g = gumbelrand(size(gs.p)...)
+    gs(g)
+end
+
 function Base.show(io::IO, gs::GumbelSoftmax)
   print(io, "GumbelSoftmax(", "probs=", gs.p, ", ", "temp=", gs.t)
+  print(io, ")")
+end
+
+
+struct StatefulSoftmax
+    p::AbstractArray{Float64, 1}
+end
+
+Flux.@functor StatefulSoftmax
+
+function (ss::StatefulSoftmax)()
+    softmax(ss.p)
+end
+
+function Base.show(io::IO, ss::StatefulSoftmax)
+  print(io, "StatefulSoftmax(", "probs=", ss.p)
   print(io, ")")
 end
