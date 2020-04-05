@@ -3,7 +3,7 @@ module Nas
 using Random
 using Flux
 using Flux: trainable
-using Zygote: IdSet
+using Zygote: Params, IdSet
 
 include("utils.jl")
 include("layers.jl")
