@@ -12,7 +12,7 @@ include("layers.jl")
 export GumbelSoftmax, StatefulSoftmax
 include("searchspaces.jl")
 export ChoiceNode, SearchSpace, choices
-# include("strategies.jl")
-# export optimize!, RandomSearch
+include("strategies.jl")
+export RandomSearch, DARTSearch, ENASearch, SNASearch, optimize! 
 
 end

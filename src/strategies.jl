@@ -14,11 +14,11 @@ function sample_onehot(k::Integer)
     return a
 end
 
-function sample(s::RandomSearch, searchspace::SeachSpace)
+function sample_uniform(searchspace::SearchSpace)
     [sample_onehot(length(choice)) for choice in choices(searchspace)]
 end
 
-function sample!(s::RandomSearch, searchspace::SeachSpace)
+function sample_uniform!(searchspace::SearchSpace)
     for choice in choices(searchspace)
         a = sample_onehot(length(choice))
         copyto!(choice.architecture, a)
@@ -30,7 +30,7 @@ function optimize!(strategy::RandomSearch, searchspace, evaluator, data; cb = ()
     n = strategy.n
     cb = runall(cb)
     for i = 1:n
-        sample!(searchspace)
+        sample_uniform!(searchspace)
         evaluator(searchspace)
         cb()
     end
@@ -44,20 +44,20 @@ struct DARTSearch{W, A, L}
 end
 
 macro inner_step(inner_opt, w, loss, expr)
-    ξ = eval(inner_opt).eta
-    if ξ > 0
-        decorated = quote
+    decorated = quote
+        ξ = $inner_opt.eta
+        if ξ > 0
             w_gs = gradient($w) do
                 $loss()
             end
             update!($inner_opt, $w, w_gs)
             $expr
             update!($inner_opt, $w, -w_gs)
+        else
+            $expr
         end
-        return decorated
-    else
-        return expr
     end
+    return decorated
 end
 
 function optimize!(strategy::DARTSearch, searchspace, evaluator, data; cb = () -> ())
@@ -67,7 +67,7 @@ function optimize!(strategy::DARTSearch, searchspace, evaluator, data; cb = () -
     w, α = params(searchspace)
     cb = runall(cb)
     trainset, validset = data
-    for train, valid in zip(trainset, validset)
+    for (train, valid) in zip(trainset, validset)
         α_gs = gradient(α) do
             @inner_step inner_opt w evaluator loss(valid)
             return arch_loss
@@ -90,7 +90,7 @@ struct ENASearch
     child_step
 end
 
-function sample_probs(controller, searchspace::SeachSpace)
+function sample_probs(controller, searchspace::SearchSpace)
     c = s.controller
     choices = choices(searchspace)
     n = length(choices[0])
@@ -98,7 +98,7 @@ function sample_probs(controller, searchspace::SeachSpace)
     reset!(c)
     probs = [zeros(n) for i in 1:(length(choices)+1)]
     log_probs = [zeros(n) for i in 1:(length(choices)+1)]
-    for i in 2:(length(choices)+1)
+    for i = 2:(length(choices)+1)
         # assuming the last layer is a softmax
         x = c[1:end-1](probs[i-1])
         probs[i] = softmax(x)
@@ -107,8 +107,8 @@ function sample_probs(controller, searchspace::SeachSpace)
     return probs[2:end], log_probs[2:end]
 end
 
-function set!(searchspace::SearchSpace, probs::AbstractArray)
-    for p, choice in zip(probs, searchspace)
+function set_architecture!(searchspace::SearchSpace, probs::AbstractArray)
+    for (p, choice) in zip(probs, searchspace)
         k = sample(1:length(choice), ProbabilityWeights(p))
         a = zeros(length(choice))
         a[k] = 1
@@ -117,15 +117,14 @@ function set!(searchspace::SearchSpace, probs::AbstractArray)
     return searchspace
 end
 
-function sample!(s::ENASearch, searchspace::SeachSpace)
-    c = s.controller
+function sample_controller!(controller, searchspace::SearchSpace)
     choices = choices(searchspace)
     n = length(choices[0])
     p = zeros(n)
-    reset!(c)
-    for c in choices
-        p = c(p)
-        i = sample(1:length(c), ProbabilityWeights(p))
+    reset!(controller)
+    for choice in choices
+        p = controller(p)
+        i = sample(1:length(choice), ProbabilityWeights(p))
         a[i] = 1
         copyto!(choice.architecture, a)
     end
@@ -153,11 +152,11 @@ function optimize!(strategy::ENASearch, searchspace, evaluator, data; cb = () ->
     controller_batch = strategy.controller_batch
     w, _ = params(searchspace)
     trainset, validset = data
-    for i in 1:child_step
-        sample!(strategy, searchspace)
+    for i = 1:child_step
+        sample_controller!(controller, searchspace)
         train!(child_loss, w, trainset, child_opt)
     end
-    for i in 1:controller_step
+    for i = 1:controller_step
         train_controller(controller, searchspace, evaluator, validset)
     end
 end
