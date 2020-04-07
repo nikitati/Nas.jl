@@ -16,6 +16,8 @@ end
 
 Flux.@functor GumbelSoftmax (p,)
 
+GumbelSoftmax(n::Integer) = GumbelSoftmax(ones(n) ./ n, 1.0)
+
 function (gs::GumbelSoftmax)(g)
     p, t = gs.p, gs.t
     glogits = (log.(p) .+ g) ./ t
@@ -45,7 +47,7 @@ end
 
 Flux.@functor StatefulSoftmax
 
-StatefulSoftmax(n::Integer) = StatefulSoftmax(randn(n))
+StatefulSoftmax(n::Integer) = StatefulSoftmax(zeros(n))
 
 function (ss::StatefulSoftmax)()
     softmax(ss.p)

@@ -16,8 +16,8 @@ end
 Flux.@functor ChoiceNode (choices,)
 
 ChoiceNode(ms::AbstractArray, arch) = ChoiceNode(tuple(ms...), arch)
-ChoiceNode(ms::AbstractArray) = ChoiceNode(tuple(ms...), nothing)
-ChoiceNode(ms...) = ChoiceNode(ms, nothing)
+ChoiceNode(ms::AbstractArray) = ChoiceNode(tuple(ms...), zeros(length(ms)))
+ChoiceNode(ms...) = ChoiceNode(ms, zeros(length(ms)))
 
 model_params(cn::ChoiceNode) = Flux.params(cn.choices)
 

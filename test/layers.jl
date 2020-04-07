@@ -11,6 +11,11 @@
     )
     x = randn(10, 500)
     @test size(c(x, z)) == (2, 500)
+    s = GumbelSoftmax(5)
+    z = s()
+    @test size(z) == (5,)
+    @test all(0 <= z_i <= 1 for z_i in z)
+    @test isapprox(sum(z), 1.0)
 end
 
 @testset "Softmax" begin

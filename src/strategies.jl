@@ -69,7 +69,7 @@ function optimize!(strategy::DARTSearch, searchspace, evaluator, data; cb = () -
     trainset, validset = data
     for (train, valid) in zip(trainset, validset)
         α_gs = gradient(α) do
-            @inner_step inner_opt w evaluator loss(valid)
+            @inner_step inner_opt w loss loss(valid)
             return arch_loss
         end
         update!(α_opt, α, α_gs)
@@ -77,6 +77,7 @@ function optimize!(strategy::DARTSearch, searchspace, evaluator, data; cb = () -
             loss(train)
         end
         update!(w_opt, w, w_gs)
+        cb()
     end
 end
 
