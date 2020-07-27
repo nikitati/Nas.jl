@@ -1,99 +1,177 @@
+abstract type AbstractChoiceNode end
 
 """
     ChoiceNode(layers...)
-    ChoiceNode(layers, architecture)
+    ChoiceNode(architecture, layers)
 
 `ChoiceNode` contains several layers from which architecture optimization
 algorithm is able to choose from. Input and output dimensions should be
 compatible for each layer. It is also possible to provide architecture model
 which parametrizes the choice node or architecture coefficients directly.
 """
-struct ChoiceNode{C, A}
-    choices::C
+mutable struct ChoiceNode{A, C <: Tuple} <: AbstractChoiceNode
     architecture::A
+    choices::C
+    choice
 end
+
+ChoiceNode(archtype, ms::AbstractArray) = ChoiceNode(archtype(length(ms)), tuple(ms...), 0)
+ChoiceNode(ms...) = ChoiceNode(nothing, ms, 0)
 
 Flux.@functor ChoiceNode (choices,)
 
-ChoiceNode(ms::AbstractArray, arch) = ChoiceNode(tuple(ms...), arch)
-ChoiceNode(ms::AbstractArray) = ChoiceNode(tuple(ms...), zeros(length(ms)))
-ChoiceNode(ms...) = ChoiceNode(ms, zeros(length(ms)))
-
-model_params(cn::ChoiceNode) = Flux.params(cn.choices)
-
-function architecture_params(cn::ChoiceNode{C, A}) where {C, A <: Union{AbstractArray{<:Number}, Nothing}}
-    Flux.Params()
-end
-
-architecture_params(cn::ChoiceNode) = Flux.params(cn.architecture)
-
-mapdata(cn::ChoiceNode, x) = map(f -> f(x), cn.choices)
-
-function (cn::ChoiceNode)(x, z)
-    xs = mapdata(cn, x)
-    sum(xs .* z)
-end
-
-function (cn::ChoiceNode{C, Nothing})(x) where {C}
-    arr = "Cannot implicitly call ChoiceNode without an architecture"
-    throw(MethodError(xn, err))
-end
-
-function (cn::ChoiceNode{C, A})(x) where {C, A <: AbstractArray{<:Number}}
-    z = cn.architecture
-    cn(x, z)
+function (cn::ChoiceNode{Nothing, C})(x) where {C <: Tuple}
+    f = cn.choices[cn.choice]
+    f(x)
 end
 
 function (cn::ChoiceNode)(x)
-    z = cn.architecture()
-    cn(x, z)
+    a = cn.architecture()
+    choices = cn.choices
+    # TODO avoid unnecessary evaluation
+    # choices = cn.choices[a .!= 0]
+    # a = [a .!= 0]
+    # TODO figure out why it is neccessary for Zygote to work
+    y = map(f -> f(x), choices)
+    y = [y...]
+    sum(y .* a)
 end
 
-Base.length(cn::ChoiceNode) = length(cn.choices)
+function archparams(cn::ChoiceNode{Nothing, C}) where {C <: Tuple}
+    Flux.Params()
+end
 
-Base.getindex(cn::ChoiceNode, i::Integer) = cn.choices[i]
-Base.getindex(cn::ChoiceNode, i::AbstractArray) = cn.choices[i]
+archparams(cn::AbstractChoiceNode) = Flux.params(cn.architecture)
+
+function set_choice!(cn::AbstractChoiceNode, choice)
+    cn.choice = choice
+end
+
+function getchoice(cn::AbstractChoiceNode)
+    cn.choice
+end
+
+Base.length(cn::AbstractChoiceNode) = length(cn.choices)
+
+Base.getindex(cn::AbstractChoiceNode, i::Integer) = cn.choices[i]
+Base.getindex(cn::AbstractChoiceNode, i::AbstractArray) = cn.choices[i]
 
 function Base.show(io::IO, cn::ChoiceNode)
-  print(io, "Choice Node(")
-  join(io, cn.choices, ", ")
-  print(io, ")")
+    print(io, "Choice Node(")
+    join(io, cn.choices, ", ")
+    print(io, ")")
 end
 
 """
-    SearchSpace(model)
+    SPChoiceNode
 
-`SearchSpace` encapsulates the Flux model (functor) equipped with `ChoiceNode`
-layers.
+Single path mode.
 """
-struct SearchSpace{T}
-    model::T
+struct SPChoiceNode{A, C} <: AbstractChoiceNode
+    architecture::A
+    choices::C
+    choice
 end
 
-choices!(p::AbstractArray, x::ChoiceNode, seen = IdSet()) = push!(p, x)
+SPChoiceNode(archtype, ms::AbstractArray) = SPChoiceNode(archtype(length(ms)), tuple(ms...), 0)
+
+Flux.@functor SPChoiceNode (choices,)
+
+function (cn::SPChoiceNode)(x)
+    a = cn.architecture()
+    i = argmax(a)
+    cn[i](x)
+end
+
+choices!(p::AbstractArray, x::T, seen = IdSet()) where {T <: AbstractChoiceNode} = push!(p, x)
 
 function choices!(p::AbstractArray, x, seen = IdSet())
-  x in seen && return
-  push!(seen, x)
-  for child in trainable(x)
-    choices!(p, child, seen)
-  end
+    x in seen && return
+    push!(seen, x)
+    fs = (getfield(x, name) for name in  fieldnames(typeof(x)))
+    for child in fs
+      choices!(p, child, seen)
+    end
 end
 
-function choices(searchspace::SearchSpace)
-    m = searchspace.model
+function choices(searchspace)
     cs = []
-    choices!(cs, m)
+    choices!(cs, searchspace)
     return tuple(cs...)
 end
 
-function params(searchspace::SearchSpace)
-  m = searchspace.model
-  ps = Flux.params(m)
-  archps = Params()
-  cs = choices(searchspace)
-  for choice in cs
-      push!(archps, architecture_params(choice)...)
-  end
-  return ps, archps
+function archparams(searchspace)
+    archps = Params()
+    cs = choices(searchspace)
+    for choice in cs
+        push!(archps, archparams(choice)...)
+    end
+    return archps
+end
+
+function fix_(x::AbstractChoiceNode, a)
+    x[a[x]]
+end
+
+function fix_(x::Chain, a)
+    Chain((fix_(layer, a) for layer in x.layers)...)
+end
+
+function fix_(x::T, a) where {T}
+    fs = fieldnames(T)
+    isempty(fs) && return x
+    c = getproperty(parentmodule(T), nameof(T))
+    c((fix_(getfield(x, n), a) for n in fs)...)
+end
+
+function archfix(searchspace, architecture::IdDict)
+    fix_(searchspace, architecture)
+end
+
+function get_choice_probs(choicenode::ChoiceNode{Nothing, C}) where {C <: Tuple}
+    n = length(choicenode)
+    return [1 / n for i = 1:n]
+end
+
+function get_choice_probs(choicenode::AbstractChoiceNode)
+    choicenode.architecture()
+end
+
+function get_probs(choice_nodes)
+    IdDict(cn => ProbabilityWeights(get_choice_probs(cn)) for cn in choice_nodes)
+end
+
+function sample_choices(prob_weights)
+    IdDict(k => sample(pw) for (k, pw) in pairs(prob_weights))
+end
+
+function sample_architecture(searchspace, probabilites)
+    probabilites = IdDict(k => ProbabilityWeights(probs) for (k, probs) in pairs(probabilites))
+    archchoices = sample_choices(probabilites)
+    archfix(searchspace, archchoices)
+end
+
+function sample_architecture(searchspace)
+    choice_nodes = choices(searchspace)
+    probabilites = get_probs(choice_nodes)
+    sample_architecture(searchspace, probabilites)
+end
+
+function set_architecture!(searchspace, archchoices)
+    for (choice_node, choice) in pairs(archchoices)
+        set_choice!(choice_node, choice)
+    end
+end
+
+function set_random_architecture!(searchspace)
+    choice_nodes = choices(searchspace)
+    probabilites = get_probs(choice_nodes)
+    archchoices = sample_choices(probabilites)
+    set_architecture!(searchspace, archchoices)
+end
+
+function set_random_architecture!(searchspace, probabilities)
+    probabilites = IdDict(k => ProbabilityWeights(probs) for (k, probs) in pairs(probabilities))
+    archchoices = sample_choices(probabilites)
+    set_architecture!(searchspace, archchoices)
 end

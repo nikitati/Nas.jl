@@ -1,21 +1,18 @@
 @testset "Gumbel" begin
-    s = GumbelSoftmax([0.2, 0.3, 0.5], 1.0)
+    s = GumbelSoftmax(3)
     z = s()
     @test size(z) == (3,)
     @test all(0 <= z_i <= 1 for z_i in z)
     @test isapprox(sum(z), 1.0)
-    c = ChoiceNode(
-        Chain(Dense(10, 100), Dense(100, 2)),
-        Chain(Dense(10, 150), Dense(150, 2)),
-        Chain(Dense(10, 200), Dense(200, 2))
-    )
-    x = randn(10, 500)
-    @test size(c(x, z)) == (2, 500)
-    s = GumbelSoftmax(5)
+    s = GumbelSoftmax(1000)
     z = s()
-    @test size(z) == (5,)
+    @test size(z) == (1000,)
     @test all(0 <= z_i <= 1 for z_i in z)
     @test isapprox(sum(z), 1.0)
+    st = STGumbelSoftmax(5)
+    z = st()
+    @test size(z) == (5,)
+    @test sum(z .== ones(size(z))) == 1
 end
 
 @testset "Softmax" begin
@@ -24,12 +21,9 @@ end
     @test size(z) == (3,)
     @test all(0 <= z_i <= 1 for z_i in z)
     @test isapprox(sum(z), 1.0)
-    c = ChoiceNode(
-        Chain(Dense(10, 100), Dense(100, 2)),
-        Chain(Dense(10, 150), Dense(150, 2)),
-        Chain(Dense(10, 200), Dense(200, 2))
-    )
-    x = randn(10, 500)
-    y = c(x, z)
-    @test size(y) == (2, 500)
+end
+
+@testset "Embedding" begin
+    emb = Nas.EmbeddingLayer(3, 5)
+    @test size(emb([3]), 1) == 3
 end

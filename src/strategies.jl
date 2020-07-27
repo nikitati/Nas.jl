@@ -1,164 +1,75 @@
 
 """
-    RandomSearch(n::Integer)
+    RandomSearch(n::Integer, k::Integer)
 
-Random search with number of iterations `n`.
+Random search with number of iterations `n` which keeps track of `k` best
+parameter combinations.
 """
 struct RandomSearch
     n::Integer
+    accumulator::Accumulator
+    RandomSearch(n::Integer, k::Integer) = new(n, Accumulator(k))
 end
 
-function sample_onehot(k::Integer)
-    a = zeros(k)
-    a[rand(1:k)] = 1
-    return a
-end
-
-function sample_uniform(searchspace::SearchSpace)
-    [sample_onehot(length(choice)) for choice in choices(searchspace)]
-end
-
-function sample_uniform!(searchspace::SearchSpace)
-    for choice in choices(searchspace)
-        a = sample_onehot(length(choice))
-        copyto!(choice.architecture, a)
+function optimize(strategy::RandomSearch, searchspace, evaluator, data; cb = () -> ())
+    n = strategy.n
+    accum = strategy.accumulator
+    cb = runall(cb)
+    for i = 1:n
+        model = sample_architecture(searchspace)
+        performance = evaluator(model)
+        add!(accum, performance, model)
+        cb()
     end
-    return searchspace
+    return toarray(accum)
 end
 
 function optimize!(strategy::RandomSearch, searchspace, evaluator, data; cb = () -> ())
     n = strategy.n
+    accum = strategy.accumulator
+    choice_nodes = choices(searchspace)
+    probabilities = get_probs(choice_nodes)
     cb = runall(cb)
     for i = 1:n
-        sample_uniform!(searchspace)
-        evaluator(searchspace)
+        set_random_architecture!(searchspace, probabilities)
+        performance = evaluator(searchspace)
+        curr_choice = IdDict(c => getchoice(c) for c in choice_nodes)
+        add!(accum, performance, curr_choice)
         cb()
     end
+    return toarray(accum)
 end
 
-struct DARTSearch{W, A, L}
+struct DARTSearch
     ξ
-    w_opt::W
-    α_opt::A
-    loss::L
-end
-
-macro inner_step(inner_opt, w, loss, expr)
-    decorated = quote
-        ξ = $inner_opt.eta
-        if ξ > 0
-            w_gs = gradient($w) do
-                $loss()
-            end
-            update!($inner_opt, $w, w_gs)
-            $expr
-            update!($inner_opt, $w, -w_gs)
-        else
-            $expr
-        end
-    end
-    return decorated
+    w_opt
+    α_opt
 end
 
 function optimize!(strategy::DARTSearch, searchspace, evaluator, data; cb = () -> ())
     ξ, w_opt, α_opt = strategy.ξ, strategy.w_opt, strategy.α_opt
-    loss = strategy.loss
+    loss = evaluator
     inner_opt = Descent(ξ)
-    w, α = params(searchspace)
+    w, α = params(searchspace), archparams(searchspace)
     cb = runall(cb)
-    trainset, validset = data
-    for (train, valid) in zip(trainset, validset)
-        α_gs = gradient(α) do
-            @inner_step inner_opt w loss loss(valid)
-            return arch_loss
+    train, valid = data
+    for (train_batch, valid_batch) in zip(train, valid)
+        if ξ > 0
+            α_gs = gradient(α) do
+                w_gs = gradient(w) do
+                    loss(train)
+                end
+                Flux.update!(inner_opt, w, w_gs)
+                arch_loss = loss(valid)
+                Flux.update!(inner_opt, w, -w_gs)
+                arch_loss
+            end
+            Flux.update!(α_opt, α, α_gs)
+        else
+            Flux.train!(loss, α, [valid_batch], α_opt)
         end
-        update!(α_opt, α, α_gs)
-        w_gs = gradient(w) do
-            loss(train)
-        end
-        update!(w_opt, w, w_gs)
+        Flux.train!(loss, w, [train_batch], w_opt)
         cb()
-    end
-end
-
-struct ENASearch
-    controller
-    controller_opt
-    controller_step
-    controller_batch
-    child_opt
-    child_loss
-    child_step
-end
-
-function sample_probs(controller, searchspace::SearchSpace)
-    c = s.controller
-    choices = choices(searchspace)
-    n = length(choices[0])
-    x = zeros(n)
-    reset!(c)
-    probs = [zeros(n) for i in 1:(length(choices)+1)]
-    log_probs = [zeros(n) for i in 1:(length(choices)+1)]
-    for i = 2:(length(choices)+1)
-        # assuming the last layer is a softmax
-        x = c[1:end-1](probs[i-1])
-        probs[i] = softmax(x)
-        log_probs[i] = logsoftmax(x)
-    end
-    return probs[2:end], log_probs[2:end]
-end
-
-function set_architecture!(searchspace::SearchSpace, probs::AbstractArray)
-    for (p, choice) in zip(probs, searchspace)
-        k = sample(1:length(choice), ProbabilityWeights(p))
-        a = zeros(length(choice))
-        a[k] = 1
-        copyto!(choice.architecture, a)
-    end
-    return searchspace
-end
-
-function sample_controller!(controller, searchspace::SearchSpace)
-    choices = choices(searchspace)
-    n = length(choices[0])
-    p = zeros(n)
-    reset!(controller)
-    for choice in choices
-        p = controller(p)
-        i = sample(1:length(choice), ProbabilityWeights(p))
-        a[i] = 1
-        copyto!(choice.architecture, a)
-    end
-    return searchspace
-end
-
-function train_controller!(strategy::ENASearch, searchspace, evaluator, data)
-    ps = params(strategy.controller)
-    for d in data
-        gs = gradient(ps) do
-            probs, log_probs = sample_probs(controller, searchspace)
-            set!(searchspace, probs)
-            reward = evaluator(data)
-            training_loss = -sum(log_probs) * reward
-            return training_loss
-        end
-        update!(strategy.controller_opt, ps, gs)
-    end
-end
-
-function optimize!(strategy::ENASearch, searchspace, evaluator, data; cb = () -> ())
-    controller, controller_opt = strategy.controller, strategy.controller_opt
-    child_opt, child_loss = strategy.child_opt, strategy.child_loss
-    controller_step, child_step = strategy.controller_step, strategy.child_step
-    controller_batch = strategy.controller_batch
-    w, _ = params(searchspace)
-    trainset, validset = data
-    for i = 1:child_step
-        sample_controller!(controller, searchspace)
-        train!(child_loss, w, trainset, child_opt)
-    end
-    for i = 1:controller_step
-        train_controller(controller, searchspace, evaluator, validset)
     end
 end
 
@@ -168,7 +79,105 @@ end
 
 function optimize!(strategy::SNASearch, searchspace, evaluator, data; cb = () -> ())
     opt = strategy.joint_opt
-    ps, α = params(searchspace)
+    ps, α = params(searchspace), archparams(searchspace)
     push!(ps, α...)
     Flux.train!(evaluator, ps, data, opt, cb = cb)
+end
+
+
+mutable struct Controller
+    embedding
+    recurrent
+    decoders
+    step
+end
+
+function Controller(searchspace, hidden_dim)
+    tokens = [length(choice) for choice in choices(searchspace)]
+    vs = sum(tokens)
+    decoders = tuple((Dense(hidden_dim, t) for t in tokens)...)
+    Controller(
+        EmbeddingLayer(hidden_dim, vs),
+        GRU(hidden_dim, hidden_dim),
+        decoders,
+        1
+    )
+end
+
+Controller(embedding, recurrent, decoders) = Controller(embedding, recurrent, decoders, 1)
+
+Flux.@functor Controller
+
+Flux.trainable(c::Controller) = (c.embedding, c.recurrent, c.decoders...)
+
+function (c::Controller)(x)
+    h = c.recurrent(c.embedding(x))
+    y = c.decoders[c.step](h)
+    c.step += 1
+    return y
+end
+
+function reset!(c::Controller)
+    Flux.reset!(c.recurrent)
+    c.step = 1
+end
+
+function sample_controller(controller, choices)
+    reset!(controller)
+    action = 0
+    nchoices = length(choices)
+    actionlogprobs = Zygote.Buffer(Array{Array{Float32, 1}, 1}(undef, nchoices))
+    actionprobs = Zygote.Buffer(Array{Array{Float32, 1}, 1}(undef, nchoices))
+    actions = Array{Integer, 1}(undef, nchoices)
+    offset = 0
+    for (i, choice) in enumerate(choices)
+        logits = controller([action + offset])[:]
+        logprobs = logsoftmax(logits)
+        probs = softmax(logits)
+        Zygote.ignore() do
+            action = sample(ProbabilityWeights(probs))
+            actions[i] = action
+        end
+        actionlogprobs[i] = logprobs
+        actionprobs[i] = probs
+        offset += length(choice)
+    end
+    copy(actionlogprobs), copy(actionprobs), actions
+end
+
+function controller_step!(controller, optim, searchspace, evaluator)
+    controller_params = params(controller)
+    choice_nodes = choices(searchspace)
+    local R
+    gs = gradient(controller_params) do
+        actionlogprobs, actionprobs, actions = sample_controller(controller, choice_nodes)
+        Zygote.ignore() do
+            archchoices = IdDict(zip(choice_nodes, actions))
+            set_architecture!(searchspace, archchoices)
+            baseline = 0
+            R = evaluator(searchspace) - baseline
+        end
+        loss = sum(-actionlogprobs[i][a] for (i, a) in enumerate(actions)) * R
+        return loss
+    end
+    update!(optim, controller_params, gs)
+end
+
+struct ENASearch
+    optimizer
+    epochs
+    controller
+end
+
+function ENASearch(searchspace, optimizer, epochs, controller_hidden)
+    ENASearch(optimizer, epochs, Controller(searchspace, controller_hidden))
+end
+
+function optimize!(strategy::ENASearch, searchspace, evaluator, data; cb = () -> ())
+    controller, epochs, opt = strategy.controller, strategy.epochs, strategy.optimizer
+    cb = runall(cb)
+    for i = 1:epochs
+        controller_step!(controller, opt, searchspace, evaluator)
+        cb()
+    end
 end
