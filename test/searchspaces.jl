@@ -1,9 +1,9 @@
 @testset "ChoiceNode" begin
-    c = ChoiceNode(
+    c = ChoiceNode([
         Chain(Dense(10, 100), Dense(100, 2)),
         Chain(Dense(10, 150), Dense(150, 2)),
         Chain(Dense(10, 200), Dense(200, 2))
-    )
+    ])
     @test length(c) == 3
     x = randn(10, 500)
     set_choice!(c, 2)
@@ -34,15 +34,15 @@
 end
 
 @testset "Searchspace" begin
-    c1 = ChoiceNode(
+    c1 = ChoiceNode([
         Chain(Dense(128, 300), Dense(300, 64)),
         Chain(Dense(128, 400), Dense(400, 64)),
         Chain(Dense(128, 500), Dense(500, 64))
-    )
-    c2 = ChoiceNode(
+    ])
+    c2 = ChoiceNode([
         Chain(Dense(64, 100), Dense(100, 10)),
         Chain(Dense(64, 150), Dense(150, 10))
-    )
+    ])
     model = Chain(c1, c2)
     cs = choices(model)
     @test length(cs) == 2

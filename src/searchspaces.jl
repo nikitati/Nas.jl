@@ -15,24 +15,25 @@ mutable struct ChoiceNode{A, C <: Tuple} <: AbstractChoiceNode
     choice
 end
 
+ChoiceNode(archtype::Nothing, ms::AbstractArray) = ChoiceNode(nothing, tuple(ms...), 0)
 ChoiceNode(archtype, ms::AbstractArray) = ChoiceNode(archtype(length(ms)), tuple(ms...), 0)
-ChoiceNode(ms...) = ChoiceNode(nothing, ms, 0)
+ChoiceNode(ms::AbstractArray) = ChoiceNode(nothing, tuple(ms...), 0)
 
 Flux.@functor ChoiceNode (choices,)
 
-function (cn::ChoiceNode{Nothing, C})(x) where {C <: Tuple}
+function (cn::ChoiceNode{Nothing, C})(x, args...) where {C <: Tuple}
     f = cn.choices[cn.choice]
-    f(x)
+    f(x, args...)
 end
 
-function (cn::ChoiceNode)(x)
+function (cn::ChoiceNode)(x, args...)
     a = cn.architecture()
     choices = cn.choices
     # TODO avoid unnecessary evaluation
     # choices = cn.choices[a .!= 0]
     # a = [a .!= 0]
     # TODO figure out why it is neccessary for Zygote to work
-    y = map(f -> f(x), choices)
+    y = map(f -> f(x, args...), choices)
     y = [y...]
     sum(y .* a)
 end
@@ -56,9 +57,15 @@ Base.length(cn::AbstractChoiceNode) = length(cn.choices)
 Base.getindex(cn::AbstractChoiceNode, i::Integer) = cn.choices[i]
 Base.getindex(cn::AbstractChoiceNode, i::AbstractArray) = cn.choices[i]
 
-function Base.show(io::IO, cn::ChoiceNode)
+function Base.show(io::IO, cn::ChoiceNode{Nothing, C}) where {C <: Tuple}
     print(io, "Choice Node(")
     join(io, cn.choices, ", ")
+    print(io, ")")
+end
+
+function Base.show(io::IO, cn::ChoiceNode)
+    print(io, "Choice Node(")
+    join(io, ["$(c):$(a)" for (c, a) in zip(cn.choices, cn.architecture())], ", ")
     print(io, ")")
 end
 
@@ -83,12 +90,14 @@ function (cn::SPChoiceNode)(x)
     cn[i](x)
 end
 
+choices!(p::AbstractArray, x::T, seen = IdSet()) where {T <: Tuple} = foreach(e -> choices!(p, e, seen), x)
+
 choices!(p::AbstractArray, x::T, seen = IdSet()) where {T <: AbstractChoiceNode} = push!(p, x)
 
 function choices!(p::AbstractArray, x, seen = IdSet())
     x in seen && return
     push!(seen, x)
-    fs = (getfield(x, name) for name in  fieldnames(typeof(x)))
+    fs = (getfield(x, name) for name in fieldnames(typeof(x)))
     for child in fs
       choices!(p, child, seen)
     end
@@ -115,6 +124,10 @@ end
 
 function fix_(x::Chain, a)
     Chain((fix_(layer, a) for layer in x.layers)...)
+end
+
+function fix_(x::Tuple, a)
+    tuple((fix_(m, a) for m in x)...)
 end
 
 function fix_(x::T, a) where {T}

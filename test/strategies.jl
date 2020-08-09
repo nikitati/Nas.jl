@@ -1,7 +1,7 @@
 Random.seed!(13)
 
 @testset "Random" begin
-    searchspace = ChoiceNode(x -> sin.(x), x -> x .^ 3, x -> 3 .* x)
+    searchspace = ChoiceNode([x -> sin.(x), x -> x .^ 3, x -> 3 .* x])
     strategy = RandomSearch(100, 3)
     x = range(0,stop=2*pi,length=100)
     y = sin.(x)
@@ -39,8 +39,8 @@ end
 @testset "ENAS" begin
     true_fun = x -> sin.(x) .^ 2
     searchspace = Chain(
-        ChoiceNode(x -> x .^ 3, x -> sin.(x), x -> 3 .* x),
-        ChoiceNode(x -> x .^ 2, x -> 0.5 .* x, x -> -1.0 .* x)
+        ChoiceNode([x -> x .^ 3, x -> sin.(x), x -> 3 .* x]),
+        ChoiceNode([x -> x .^ 2, x -> 0.5 .* x, x -> -1.0 .* x])
     )
     strategy = ENASearch(searchspace, ADAM(), 500, 100)
     x = range(0,stop=2*pi,length=100)
