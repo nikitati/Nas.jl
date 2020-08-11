@@ -1,0 +1,9 @@
+# Datasets
+data/*
+!data/generate_data.jl
+
+# Experiment outputs
+outputs/
+
+# Notebooks
+.ipynb_checkpoints/

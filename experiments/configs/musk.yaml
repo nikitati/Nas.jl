@@ -1,0 +1,27 @@
+seed: 42
+kfolds: 10
+nsamples: 10
+eval_epochs: 10
+search:
+  random:
+    n: 100
+    k: 10
+  randomws:
+    n: 500
+    k: 10
+  enas:
+    controller_epochs: 50
+    controller_hidden: 100
+    regularization: 0.0005
+    lr: 0.0001
+  darts:
+    epochs: 25
+    regularization: 0.0005
+    ksi: 0
+    lr_w: 0.00005
+    lr_alpha: 0.0005
+  snas:
+    epochs: 25
+    decay: 0.01
+    regularization: 0.0005
+    lr: 0.00001
