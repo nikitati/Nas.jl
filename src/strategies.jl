@@ -11,7 +11,7 @@ struct RandomSearch
     RandomSearch(n::Integer, k::Integer) = new(n, Accumulator(k))
 end
 
-function optimize(strategy::RandomSearch, searchspace, evaluator, data; cb = () -> ())
+function optimize(strategy::RandomSearch, searchspace, evaluator, data = nothing; cb = () -> ())
     n = strategy.n
     accum = strategy.accumulator
     cb = runall(cb)
@@ -24,7 +24,7 @@ function optimize(strategy::RandomSearch, searchspace, evaluator, data; cb = () 
     return toarray(accum)
 end
 
-function optimize!(strategy::RandomSearch, searchspace, evaluator, data; cb = () -> ())
+function optimize!(strategy::RandomSearch, searchspace, evaluator, data = nothing; cb = () -> ())
     n = strategy.n
     accum = strategy.accumulator
     choice_nodes = choices(searchspace)
@@ -173,7 +173,7 @@ function ENASearch(searchspace, optimizer, epochs, controller_hidden)
     ENASearch(optimizer, epochs, Controller(searchspace, controller_hidden))
 end
 
-function optimize!(strategy::ENASearch, searchspace, evaluator, data; cb = () -> ())
+function optimize!(strategy::ENASearch, searchspace, evaluator, data = nothing; cb = () -> ())
     controller, epochs, opt = strategy.controller, strategy.epochs, strategy.optimizer
     cb = runall(cb)
     for i = 1:epochs

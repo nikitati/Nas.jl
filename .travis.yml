@@ -5,10 +5,11 @@ os:
   - osx
 julia:
   - 1.4
+  - 1.5
   - nightly
 notifications:
   email: false
 jobs:
   allow_failures:
-    - julia: nightly
+    - julia: nightly, 1.5
   fast_finish: true
