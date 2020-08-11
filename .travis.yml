@@ -11,5 +11,5 @@ notifications:
   email: false
 jobs:
   allow_failures:
-    - julia: nightly, 1.5
+    - julia: nightly
   fast_finish: true
