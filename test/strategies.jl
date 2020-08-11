@@ -26,14 +26,18 @@ end
 end
 
 @testset "SNAS" begin
-    searchspace = ChoiceNode(GumbelSoftmax, [x -> sin.(x), x -> x .^ 3, x -> 3 .* x])
-    strategy = SNASearch(Descent(0.01))
+    searchspace = ChoiceNode(GumbelSoftmax, [x -> sin.(x), x -> x .^ 3, x -> 3 .* x], 10)
+    strategy = SNASearch(2, Descent(0.01))
     x = range(0,stop=2*pi,length=100)
     y = sin.(x)
     loss(x, y) = Flux.mse(searchspace(x), y)
     data = zip(x, y)
-    optimize!(strategy, searchspace, loss, data)
+    dataloader() = data
+    temp = searchspace.architecture.t
+    @test isapprox(temp, 10)
+    optimize!(strategy, searchspace, loss, dataloader)
     @test argmax(searchspace.architecture()) == 1
+    @test searchspace.architecture.t < temp
 end
 
 @testset "ENAS" begin

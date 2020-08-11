@@ -15,8 +15,8 @@ mutable struct ChoiceNode{A, C <: Tuple} <: AbstractChoiceNode
     choice
 end
 
-ChoiceNode(archtype::Nothing, ms::AbstractArray) = ChoiceNode(nothing, tuple(ms...), 0)
-ChoiceNode(archtype, ms::AbstractArray) = ChoiceNode(archtype(length(ms)), tuple(ms...), 0)
+ChoiceNode(archtype::Nothing, ms::AbstractArray, args...) = ChoiceNode(nothing, tuple(ms...), 0)
+ChoiceNode(archtype, ms::AbstractArray, args...) = ChoiceNode(archtype(length(ms), args...), tuple(ms...), 0)
 ChoiceNode(ms::AbstractArray) = ChoiceNode(nothing, tuple(ms...), 0)
 
 Flux.@functor ChoiceNode (choices,)

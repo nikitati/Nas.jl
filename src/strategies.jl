@@ -74,14 +74,28 @@ function optimize!(strategy::DARTSearch, searchspace, evaluator, data; cb = () -
 end
 
 struct SNASearch{T}
+    epochs::Integer
     joint_opt::T
 end
 
-function optimize!(strategy::SNASearch, searchspace, evaluator, data; cb = () -> ())
-    opt = strategy.joint_opt
+function apply!(d::InvDecay, gs::S) where {S <: Union{STGumbelSoftmax, GumbelSoftmax}}
+    γ = d.gamma
+    n = get!(d.state, gs, 1)
+    gs.t *= 1 / (1 + γ * n)
+    d.state[gs] = n + 1
+end
+
+function optimize!(strategy::SNASearch, searchspace, evaluator, dataloader; cb = () -> ())
+    epochs, opt = strategy.epochs, strategy.joint_opt
     ps, α = params(searchspace), archparams(searchspace)
+    choicenodes = choices(searchspace)
+    decay = InvDecay()
     push!(ps, α...)
-    Flux.train!(evaluator, ps, data, opt, cb = cb)
+    for e = 1:epochs
+        data = dataloader()
+        Flux.train!(evaluator, ps, data, opt, cb = cb)
+        foreach(c -> apply!(decay, c.architecture), choicenodes)
+    end
 end
 
 
