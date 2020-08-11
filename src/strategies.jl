@@ -75,6 +75,7 @@ end
 
 struct SNASearch{T}
     epochs::Integer
+    decay::AbstractFloat
     joint_opt::T
 end
 
@@ -86,10 +87,10 @@ function apply!(d::InvDecay, gs::S) where {S <: Union{STGumbelSoftmax, GumbelSof
 end
 
 function optimize!(strategy::SNASearch, searchspace, evaluator, dataloader; cb = () -> ())
-    epochs, opt = strategy.epochs, strategy.joint_opt
+    epochs, decay, opt = strategy.epochs, strategy.decay, strategy.joint_opt
     ps, α = params(searchspace), archparams(searchspace)
     choicenodes = choices(searchspace)
-    decay = InvDecay()
+    decay = InvDecay(decay)
     push!(ps, α...)
     for e = 1:epochs
         data = dataloader()

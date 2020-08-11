@@ -27,7 +27,7 @@ end
 
 @testset "SNAS" begin
     searchspace = ChoiceNode(GumbelSoftmax, [x -> sin.(x), x -> x .^ 3, x -> 3 .* x], 10)
-    strategy = SNASearch(2, Descent(0.01))
+    strategy = SNASearch(1, 0.1, Descent(0.01))
     x = range(0,stop=2*pi,length=100)
     y = sin.(x)
     loss(x, y) = Flux.mse(searchspace(x), y)
