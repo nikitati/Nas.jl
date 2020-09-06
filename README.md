@@ -42,6 +42,6 @@ Flux.train!(model, ...)
 
 ## References
 
-<a name="cite1"><b>1</b></a> *Pham, H., Guan, M.Y., Zoph, B., Le, Q.V. and Dean, J., 2018. Efficient neural architecture search via parameter sharing. arXiv preprint arXiv:1802.03268.*, https://arxiv.org/abs/1802.03268
-<a name="cite2"><b>2</b></a> *Liu, H., Simonyan, K. and Yang, Y., 2018. Darts: Differentiable architecture search. arXiv preprint arXiv:1806.09055.*, https://arxiv.org/abs/1806.09055
-<a name="cite3"><b>3</b></a> *Xie, S., Zheng, H., Liu, C. and Lin, L., 2018. SNAS: stochastic neural architecture search. arXiv preprint arXiv:1812.09926.*, https://arxiv.org/abs/1812.09926
+<a name="cite1"><b>1</b></a> *Pham, H., Guan, M.Y., Zoph, B., Le, Q.V. and Dean, J., 2018. Efficient neural architecture search via parameter sharing. arXiv preprint arXiv:1802.03268.*, https://arxiv.org/abs/1802.03268  
+<a name="cite2"><b>2</b></a> *Liu, H., Simonyan, K. and Yang, Y., 2018. Darts: Differentiable architecture search. arXiv preprint arXiv:1806.09055.*, https://arxiv.org/abs/1806.09055  
+<a name="cite3"><b>3</b></a> *Xie, S., Zheng, H., Liu, C. and Lin, L., 2018. SNAS: stochastic neural architecture search. arXiv preprint arXiv:1812.09926.*, https://arxiv.org/abs/1812.09926  
